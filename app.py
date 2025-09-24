@@ -17,7 +17,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent)), name="static")
 
 # OpenAI setup (expects OPENAI_API_KEY in env). Model can be overridden via GPT_MODEL env.
-OPENAI_MODEL = os.getenv('GPT_MODEL', 'gpt-4o')
+OPENAI_MODEL = os.getenv('GPT_MODEL', 'gpt-4.1')
 try:
     oai_client = OpenAI()
 except Exception:
@@ -51,7 +51,7 @@ def get_guidance_section(dx_id: str) -> str:
 
 ALLOWED_DX = list(engine.DISEASES.keys())  # enforce known IDs
 
-def get_gpt_differentials(symptom_ids: list[str], free_text: str, priors: list[dict] | None = None) -> list[dict]:
+def get_gpt_differentials(symptom_ids: list[str], free_text: str, priors: list[dict] | None = None, image_path: str | None = None) -> list[dict]:
     """Call GPT to produce [{dx_id,label,confidence,rationale[]}] with confidence in [0,1]."""
     print("GPT DEBUG: model=", OPENAI_MODEL)
     print("GPT DEBUG: symptom_ids=", symptom_ids)
@@ -81,15 +81,29 @@ def get_gpt_differentials(symptom_ids: list[str], free_text: str, priors: list[d
                 "Return 2-5 best candidates. confidence must be 0-1; cap if uncertain. Keep rationale short."
             )
         }
-        resp = oai_client.chat.completions.create(
-            model=OPENAI_MODEL,
-            response_format={"type": "json_object"},
-            messages=[
+        user_content = [
+            {"type": "text", "text": json.dumps(user, ensure_ascii=False)}
+        ]
+        if image_path:
+            try:
+                img_bytes = Path(image_path).read_bytes()
+                ext = Path(image_path).suffix.lstrip('.').lower() or 'png'
+                b64 = base64.b64encode(img_bytes).decode('ascii')
+                data_url = f"data:image/{ext};base64,{b64}"
+                user_content.append({"type": "image_url", "image_url": {"url": data_url}})
+            except Exception as e:
+                print("GPT DEBUG: failed to embed image:", repr(e))
+        kwargs = {
+            "model": OPENAI_MODEL,
+            "response_format": {"type": "json_object"},
+            "messages": [
                 {"role": "system", "content": sys},
-                {"role": "user", "content": json.dumps(user, ensure_ascii=False)},
+                {"role": "user", "content": user_content},
             ],
-            temperature=0.1,
-        )
+        }
+        if not str(OPENAI_MODEL).lower().startswith("gpt-5"):
+            kwargs["temperature"] = 0.1
+        resp = oai_client.chat.completions.create(**kwargs)
         # Raw response object can be large; print only the message content
         # print("GPT DEBUG: full response=", resp)
         content = resp.choices[0].message.content
@@ -151,14 +165,57 @@ def main_page():
         for s_id, label in sorted(engine.SYMPTOMS.items(), key=lambda x: x[1].lower()):
             ui.checkbox(label, on_change=lambda e, s_id=s_id: (selected.add(s_id) if e.value else selected.discard(s_id)))
     free_text = ui.textarea('Describe any other symptoms or the situation (optional)').props('outlined').classes('w-full')
+    uploaded_files: list = []
+    def handle_upload(e):
+        uploaded_files.clear()
+        # Newer NiceGUI: single event with .name/.content; Older: may have e.files
+        if hasattr(e, 'files') and e.files:
+            uploaded_files.extend(e.files)
+        else:
+            uploaded_files.append(e)
+    uploaded_image = ui.upload(label='Upload an image (optional)', multiple=False, on_upload=handle_upload).classes('w-full')
 
     results_col = ui.column().classes('mt-4 gap-2')
 
     def submit():
         payload = sorted(list(selected))
+        # Guardrail: if all inputs are blank, do nothing (no output rendered)
+        if not payload and not ((free_text.value or '').strip()) and not uploaded_files:
+            results_col.clear()
+            return
         # Use rules as priors/context for GPT, but prefer GPT as the single output list
         priors = engine.score(payload)
-        gpt_results = get_gpt_differentials(payload, free_text.value, priors)
+        image_path = None
+        if uploaded_files:
+            evt = uploaded_files[0]
+            name = getattr(evt, 'name', 'upload.bin')
+            temp_dir = Path(__file__).parent / "uploads"
+            temp_dir.mkdir(exist_ok=True)
+            image_path = temp_dir / name
+            data = None
+            if hasattr(evt, 'content'):
+                c = evt.content
+                if isinstance(c, (bytes, bytearray)):
+                    data = c
+                else:
+                    try:
+                        data = c.read()
+                    except Exception:
+                        data = None
+            if data is None and hasattr(evt, 'files') and evt.files:
+                # fallback: first file object style
+                f0 = evt.files[0]
+                try:
+                    data = f0.content.read()
+                except Exception:
+                    data = None
+                    image_path = None
+            if data is not None and image_path is not None:
+                with open(image_path, 'wb') as f:
+                    f.write(data)
+            else:
+                image_path = None
+        gpt_results = get_gpt_differentials(payload, free_text.value, priors, image_path=str(image_path) if image_path else None)
         results_col.clear()
         with results_col:
             unified = gpt_results if gpt_results else priors
