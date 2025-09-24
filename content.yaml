@@ -1,0 +1,76 @@
+symptoms:
+  - id: gasping_surface
+    label: Fish gasping near the surface (esp. afternoon)
+  - id: flashing_rubbing
+    label: Flashing/rubbing against surfaces
+  - id: visible_lice
+    label: Visible small round "lice" on skin/fins
+  - id: white_spots
+    label: Pinhead-sized white spots on skin/fins
+  - id: ulcers_erosions
+    label: Skin ulcers or erosions
+  - id: cottony_growths
+    label: Cottony tufts on skin/fins
+  - id: frayed_fins
+    label: Frayed or rotten-looking fins
+  - id: red_or_pale_gills
+    label: Very red or very pale gills
+  - id: lethargy_bottom
+    label: Lethargic, sitting at the bottom
+  - id: abnormal_swim
+    label: Erratic or spiral swimming
+  - id: pop_eye_dropsy
+    label: Swollen body (dropsy) or bulging eyes (pop-eye)
+  - id: long_white_feces
+    label: Long white/clear feces strands
+
+differentials:
+  - id: hypoxia_wq_stress
+    label: Low oxygen / water-quality stress
+  - id: argulus
+    label: Argulus (fish lice)
+  - id: gill_flukes
+    label: Gill flukes
+  - id: ich_costia
+    label: Ich / Costia-like protozoans
+  - id: bacterial_ulcer_eus
+    label: Bacterial ulcer disease / EUS-like complex
+  - id: saprolegnia
+    label: Saprolegniasis (fungal)
+  - id: columnaris_like
+    label: Columnaris-like fin/gill rot
+  - id: ammonia_nitrite_tox
+    label: Ammonia/nitrite toxicity
+
+likelihoods:
+  gasping_surface:
+    hypoxia_wq_stress: H
+    ammonia_nitrite_tox: M
+    gill_flukes: M
+  flashing_rubbing:
+    gill_flukes: H
+    argulus: M
+  visible_lice:
+    argulus: H
+  white_spots:
+    ich_costia: H
+  ulcers_erosions:
+    bacterial_ulcer_eus: H
+    columnaris_like: M
+  cottony_growths:
+    saprolegnia: H
+  frayed_fins:
+    columnaris_like: H
+  red_or_pale_gills:
+    hypoxia_wq_stress: M
+    ammonia_nitrite_tox: M
+  lethargy_bottom:
+    hypoxia_wq_stress: M
+    ich_costia: M
+  abnormal_swim:
+    hypoxia_wq_stress: L
+    bacterial_ulcer_eus: M
+  pop_eye_dropsy:
+    bacterial_ulcer_eus: M
+  long_white_feces:
+    ich_costia: M
