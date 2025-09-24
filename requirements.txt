@@ -3,3 +3,4 @@ uvicorn
 nicegui
 pydantic
 pyyaml
+openai
